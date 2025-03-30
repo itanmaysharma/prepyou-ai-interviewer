@@ -53,10 +53,10 @@ Make sure you have the following installed:
 - npm  
 
 ### 📥 Clone the Repository
-
-`git clone https://github.com/itanmaysharma/prepyou-ai-interviewer.git`
-`cd prepyou-ai-interviewer`
-
+```
+git clone https://github.com/itanmaysharma/prepyou-ai-interviewer.git
+cd prepyou-ai-interviewer
+```
 ## 📦 Install Dependencie
 
 Install the project dependencies using npm:

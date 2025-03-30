@@ -54,26 +54,21 @@ Make sure you have the following installed:
 
 ### 📥 Clone the Repository
 
-```bash
 git clone https://github.com/itanmaysharma/prepyou-ai-interviewer.git
 cd prepyou-ai-interviewer
 
-## 📦 Install Dependencies
+## 📦 Install Dependencie
 
 Install the project dependencies using npm:
 
-```bash
 npm install
 
 
----
 
-```markdown
 ## 🛠 Create `.env.local` File
 
 Create a `.env.local` file in the root directory of the project and add the following environment variables:
 
-```env
 NEXT_PUBLIC_VAPI_WEB_TOKEN=
 NEXT_PUBLIC_VAPI_WORKFLOW_ID=
 GOOGLE_GENERATIVE_AI_API_KEY=
@@ -91,14 +86,9 @@ FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
 
 
-
----
-
-```markdown
 ## ▶️ Run the App
 
 Start the development server:
 
-```bash
 npm run dev
 

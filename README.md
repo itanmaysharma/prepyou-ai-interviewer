@@ -57,7 +57,7 @@ Make sure you have the following installed:
 git clone https://github.com/itanmaysharma/prepyou-ai-interviewer.git
 cd prepyou-ai-interviewer
 ```
-## 📦 Install Dependencie
+## 📦 Install Dependencies
 
 Install the project dependencies using npm:
 
@@ -85,6 +85,7 @@ FIREBASE_PROJECT_ID=
 FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
 ```
+Replace the placeholder values with your actual Firebase, Vapi credentials.
 
 ## ▶️ Run the App
 

@@ -24,6 +24,7 @@
 .DS_Store
 .idea/
 *.pem
+WORKLOG.md
 
 # debug
 npm-debug.log*

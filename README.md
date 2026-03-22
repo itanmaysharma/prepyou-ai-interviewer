@@ -4,6 +4,12 @@ A job interview preparation platform powered by Vapi AI Voice agents.
 
 ---
 
+## 🎥 Demo
+
+Head to this Loom walkthrough for a product demo: [PrepYou Demo](https://www.loom.com/share/1f3ecf9f6d954c80a6072ac872eac9d0)
+
+---
+
 ## 🤖 Introduction
 
 PrepYou is a modern platform designed to assist users in preparing for job interviews.

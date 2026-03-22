@@ -1,0 +1,303 @@
+# Work Log
+
+## Date
+
+- 2026-03-21
+
+## Completed So Far
+
+- Cloned the repository into `/Users/sharma/Github/prepyou`.
+- Analyzed the project structure and confirmed it is a Next.js 15 app using Firebase, Gemini, and Vapi.
+- Reviewed the auth flow, interview generation route, feedback creation flow, and main interview pages.
+- Identified reliability issues in the current code:
+  - sign-in server action could fail silently while the UI still showed success
+  - server pages relied on non-null user assertions instead of explicit auth redirects
+  - interview generation assumed the model always returned perfectly parseable JSON
+  - feedback submission could be triggered more than once when a call ended
+  - saved interview cover images were not used consistently in the UI
+- Applied code changes for those reliability fixes in the current working tree.
+- Started a local `npm install` to validate the app, then stopped that line of work when the task changed.
+- Removed the installed dependencies by deleting `node_modules`, per request, to return the repo to a clean dependency state.
+- Added Docker containerization support:
+  - `Dockerfile`
+  - `docker-compose.yml`
+  - `.dockerignore`
+  - `.env.example`
+  - Next.js `output: "standalone"` configuration
+  - Docker usage documentation in `README.md`
+- Expanded the Docker setup to support container-first development with a dedicated `prepyou-dev` service and named Docker volumes for dependencies/build artifacts.
+- Validated the Docker setup:
+  - `docker compose config` succeeds
+  - `docker compose build prepyou-dev` succeeds
+  - `docker compose up -d prepyou-dev` starts successfully
+  - the app is reachable inside the container on port `3000`
+- Created a local, git-ignored `.env.local` with the real project configuration.
+- Revalidated the dev container with the real environment:
+  - `/` responds with the expected `307` redirect to `/sign-in`
+  - `/sign-in` responds with `200`
+  - Next.js loads `.env.local` correctly inside the container
+- The dev container is now the working runtime for further improvements.
+- Completed item 1, auth flow hardening:
+  - added a typed auth action result shape
+  - clear invalid session cookies on failed verification
+  - verify the app user record exists before server sign-in succeeds
+  - improved Firebase auth error messages in the client
+  - sign-out client auth if server-side auth/setup fails
+  - validated with `docker compose exec -T prepyou-dev npx tsc --noEmit`
+  - validated `/` redirect and `/sign-in` response in the container
+- Completed item 2, interview generation API hardening:
+  - handle invalid JSON request bodies explicitly
+  - normalize and deduplicate `techstack`
+  - accept either `userid` or `userId`
+  - sanitize AI-generated questions before saving
+  - return clearer status codes for request validation vs invalid model output
+  - validated with `docker compose exec -T prepyou-dev npx tsc --noEmit`
+  - validated `POST /api/vapi/generate` failure paths for invalid JSON and malformed payloads in the container
+- Completed item 3, feedback generation reliability:
+  - made feedback creation idempotent on the server for the same interview/user pair
+  - reset agent state cleanly at call start
+  - added explicit feedback-processing client state during completion
+  - kept post-call navigation deterministic
+  - validated with `docker compose exec -T prepyou-dev npx tsc --noEmit`
+  - validated route compile/serve behavior through the container
+- Completed item 4, UI and data consistency cleanup:
+  - removed remaining nullable-by-assumption patterns on the home page
+  - made dashboard list handling explicit with array fallbacks
+  - fixed interview card fallback behavior so a score of `0` renders correctly
+  - validated with `docker compose exec -T prepyou-dev npx tsc --noEmit`
+  - validated `/` and `/sign-in` responses in the container
+- Upgraded the Vapi web client dependency to address the unsupported Daily SDK runtime failure seen during live interview generation testing:
+  - `@vapi-ai/web` now resolves to `2.5.2`
+  - transitive `@daily-co/daily-js` now resolves to `0.85.0`
+  - validated with `docker compose exec -T prepyou-dev npm ls @vapi-ai/web @daily-co/daily-js`
+  - validated with `docker compose exec -T prepyou-dev npx tsc --noEmit`
+- Installed `cloudflared` and created a quick tunnel to the local Docker app for Vapi end-to-end testing.
+- Verified the tunneled local endpoint responds:
+  - `https://recorder-utah-sir-warriors.trycloudflare.com/api/vapi/generate`
+- Added a local-development fallback for interview generation when Gemini quota is exhausted:
+  - the generate API now detects quota exhaustion in local development
+  - it creates a deterministic interview question set locally instead of failing the whole request
+  - interview records are still saved normally so the rest of the app flow can be tested
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+  - validated end to end with a Dockerized POST to `/api/vapi/generate`, which returned `200` with `fallbackUsed: true`
+- Added a Vapi payload-compatibility pass for interview generation:
+  - `amount` values like `5 questions` are now normalized to a numeric amount
+  - unresolved workflow placeholders like `{{ userId }}` are rejected explicitly
+  - validation now points to the unresolved `userId` instead of failing generically on amount parsing
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+  - validated with a Dockerized bad-payload probe returning `400` and `fieldErrors.userId`
+  - validated with a Dockerized success-path probe using `amount: "5 questions"` and a real user id, which returned `200` with `fallbackUsed: true`
+- Moved interview generation ownership back into the app:
+  - added a code-defined Vapi assistant for collecting interview requirements
+  - the app now parses the collected transcript and calls `/api/vapi/generate` itself with the authenticated `userId`
+  - the generate flow no longer depends on the external Vapi workflow API node or workflow-side `userId` substitution
+  - the app stops the generation call after the collection-complete message and ignores the benign Vapi "meeting has ended" error from that stop
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Polished the app-owned generation transcript extraction:
+  - the generation assistant now starts directly with the role question instead of a readiness question
+  - captured answers are cleaned to remove leading filler speech such as `uh` and `um`
+  - interview type answers are normalized to `Technical`, `Behavioral`, or `Mixed`
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Replaced prompt-matching transcript extraction with strict ordered-answer extraction:
+  - the generate flow now uses the first five user answers in fixed order: role, type, level, amount, techstack
+  - this removes field drift caused by trying to infer answers from assistant prompt text
+  - client-side generation errors now log the exact payload and response status instead of `{}`-style opaque objects
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Added a confirmation/edit step before creating generated interviews:
+  - after the generate call ends, the app now pauses and shows the extracted role, type, level, amount, and tech stack
+  - the user can edit those values or retake the call before the interview is created
+  - interview creation now happens only after explicit confirmation from the review step
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Added a local-development fallback for feedback creation:
+  - if Gemini quota is exhausted while generating interview feedback locally, the server now builds a deterministic feedback object instead of failing the request
+  - fallback feedback is saved through the same Firestore path so the feedback page remains testable end to end in Docker
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Added an `Architecture` section to the README:
+  - documented the current runtime roles of Docker, Next.js, Firebase, Firestore, Vapi, and Gemini
+  - documented the current generation and interview-taking flow at a high level
+  - noted that local development includes deterministic Gemini fallbacks while production remains Gemini-first
+- Cleaned up the rest of the README to match the current runtime:
+  - updated the introduction and feature wording to match the app-owned generation flow
+  - made Docker the primary Quick Start path and host `npm` usage optional
+  - updated the environment variable section to include the current values expected by the app
+  - added local development notes for Vapi usage and Gemini fallback behavior
+- Removed obsolete Vapi workflow references from the active setup path:
+  - removed `NEXT_PUBLIC_VAPI_WORKFLOW_ID` from Docker build args and explicit compose environment wiring
+  - removed the workflow id from `.env.example` and the README env example
+  - revalidated `docker compose --env-file .env.local config`
+  - note: the raw resolved Compose output can still show `NEXT_PUBLIC_VAPI_WORKFLOW_ID` if it remains present in `.env.local`, because `env_file` imports the whole file
+- Added production-readiness notes to the README:
+  - documented that production still requires working Gemini availability for real generation and feedback
+  - documented that the deterministic Gemini fallbacks are development-only safeguards
+  - documented that production still depends on a valid public-facing app deployment and the intended Firebase project configuration
+- Refined the README wording to frame Gemini correctly:
+  - documented Gemini as the intended primary LLM for generation and feedback
+  - documented local deterministic fallbacks as development-only workflow safeguards, not a local LLM replacement
+- Completed repo-hygiene cleanup:
+  - removed tracked Windows `:Zone.Identifier` junk files from `public/`
+  - removed tracked unused/duplicate public assets that are not referenced by the app
+  - removed tracked `.idea/` project-local IDE files
+  - added `.idea/` to `.gitignore`
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Refactored the interview call component for clearer responsibility boundaries:
+  - extracted generation transcript parsing into `lib/interview-generation.ts`
+  - extracted the generation review/edit UI into `components/GenerationReviewForm.tsx`
+  - simplified `components/Agent.tsx` so it focuses on Vapi call orchestration and submit actions
+  - split the overloaded completion state into clearer generation vs feedback submission states
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Completed the README setup pass for outside users:
+  - added prerequisite account requirements
+  - added Firebase setup steps and mapped them to env vars
+  - added Vapi setup guidance for the current in-code assistant flow
+  - added Gemini setup guidance and clarified the Gemini-first design
+  - added a first successful run checklist
+  - added a short troubleshooting section
+- Reset Firestore data for a clean demo state:
+  - deleted all documents from `feedback`, `interviews`, and `users`
+  - deleted counts: `feedback=3`, `interviews=7`, `users=6`
+  - verified all three collections were empty afterward
+  - Firebase Auth accounts were intentionally left untouched
+- Added two demo-facing auth UX improvements:
+  - added a working `Sign Out` button to the authenticated app layout
+  - added a `Forgot password?` action on sign-in using Firebase password reset email
+  - validated with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+
+## In Progress
+
+- Investigating interview-generation failure from live testing.
+
+## Next Work Items
+
+- Start Docker locally and run:
+  - `docker compose up --build prepyou-dev`
+  - `docker compose --env-file .env.local up --build prepyou`
+- Confirm the app boots successfully on port `3000`.
+- Verify Firebase auth, interview generation, and feedback flows inside the container.
+- Continue feature and reliability improvements through the containerized workflow only.
+- Choose the next improvement area after the approved reliability sequence.
+- Diagnostic pass added to `POST /api/vapi/generate` to log request-shape validation failures without exposing secrets; pending a live retry to capture the actual Vapi workflow payload mismatch.
+- Pending live retest after the Vapi/Daily dependency upgrade.
+- Approved next compatibility/debug pass:
+  - send broader variable aliases into the Vapi generation workflow
+  - improve client-side Vapi error logging for the next live retry
+- Pending Vapi workflow update to use the local tunnel endpoint and include `userId` in the API request body.
+- Approved environment update:
+  - replace the local `GOOGLE_GENERATIVE_AI_API_KEY` in `.env.local`
+  - restart the Docker dev service so interview generation retests against the new Gemini key
+- Approved another Gemini key swap for free-tier retesting with a different project/account context.
+- Approved local-development fallback generation so interview creation remains testable without paid Gemini quota.
+- Approved request-shape compatibility updates for the Vapi workflow payload.
+- Approved moving interview generation out of the external Vapi workflow and into the app-controlled client flow.
+- Approved a small polish pass to stabilize transcript extraction after the first successful local end-to-end generate test.
+- Approved replacing transcript prompt-matching with strict ordered extraction after the next live failure showed field drift.
+- Approved adding a confirmation/edit step after generation so noisy transcripts do not immediately become saved interviews.
+- Approved applying the same local-only fallback pattern to feedback generation after the interview flow hit Gemini quota exhaustion.
+- Approved documenting the current runtime architecture in the README.
+- Approved a broader README cleanup so the rest of the setup instructions match the current container-first workflow.
+- Approved removing obsolete Vapi workflow references from the active docs/config path while keeping app behavior unchanged.
+- Approved adding explicit production-readiness notes after the Vapi workflow cleanup.
+- Approved reframing the README so Gemini is presented as the intended production LLM while local fallbacks are described accurately.
+- Approved the initial repo-hygiene cleanup pass before deeper code restructuring.
+- Approved the `Agent` refactor slice: utility extraction, review-form extraction, and clearer completion-state handling.
+- Approved the README completion pass for external clone-and-run clarity.
+- Approved clearing Firestore app data so the demo can start from a clean state.
+- Approved adding a demo-safe forgot-password option and sign-out button before continuing the recording flow.
+- Approved rolling back the temporary `prepyou.ai` demo URL hack so the app returns to the normal `localhost` workflow before fixing voice-agent quality.
+- Approved a narrow voice-quality pass that keeps Vapi, keeps the live transcript and review step, and upgrades the Deepgram transcriber configuration for better short-answer recognition.
+- Approved a follow-up normalization pass so generation review fields are cleaned before they appear in the review form.
+- Approved a follow-up parser fix so transcript fragments are grouped by assistant question turn before being mapped to review fields.
+- Approved a follow-up UX fix so failed generation extraction surfaces a visible error state instead of silently returning to idle.
+- Approved a merged-transcript fallback parser so the generation flow can recover when Vapi returns one combined user answer stream instead of clean turn-by-turn answers.
+- Approved one final generation-text cleanup pass to strip conversational wrappers and stray transcript junk from role/level before the review form is shown.
+- Approved reverting interview generation back to a Vapi workflow-based path instead of transcript parsing.
+- Approved hardening the interview page and tech-icon utilities so malformed workflow-created `techstack` data cannot crash the UI.
+- Approved replacing voice-based interview generation with a clean form while keeping Vapi for the actual interview session.
+
+## Notes
+
+- The code edits made before containerization are still present as uncommitted local changes.
+- No packages are currently installed in the local workspace.
+- Docker build-time env wiring is necessary here because the app uses `NEXT_PUBLIC_*` variables and initializes Firebase-admin from environment-backed modules.
+- Docker daemon access is working now.
+- `.env.local` exists locally and remains excluded by `.gitignore`.
+- Validation so far has been compile and route/API probe based inside Docker; full interactive interview-flow testing with live Vapi calls has not been automated in this pass.
+- Current local behavior for `POST /api/vapi/generate`:
+  - production still uses Gemini-only behavior
+  - local development falls back to deterministic question generation if Gemini returns quota exhaustion
+- Current local behavior for feedback creation:
+  - production still uses Gemini-only evaluation
+  - local development falls back to deterministic feedback generation if Gemini returns quota exhaustion
+- Current runtime architecture snapshot:
+  - Docker runs the Next.js app locally as the main execution environment
+  - Firebase Auth + Firestore remain the real backend services used by the app
+  - Vapi is still used for voice calls and transcription in both generate and interview modes
+  - the old external Vapi generation workflow is no longer the active local generation path
+  - generation now uses an in-code Vapi assistant, then the app calls `/api/vapi/generate` itself
+  - interview feedback is generated after the interview call ends from the saved transcript
+  - Gemini is still the primary AI provider for question generation and feedback analysis in production
+  - local development falls back to deterministic generation/feedback when Gemini quota is exhausted
+- Current workflow issue still visible in live Vapi testing:
+  - the workflow is not resolving `userId` before calling the API
+  - the route now surfaces that problem explicitly as a `userId` validation error
+- Current generate-flow behavior:
+  - `/interview` now starts the in-code generation assistant instead of the external workflow id
+  - the old Vapi workflow settings are no longer part of the local generate path
+- Temporary demo URL hack rollback completed:
+  - removed the `allowedDevOrigins` override from `next.config.ts`
+  - deleted the temporary `demo-nginx.conf` and `demo-httpd.conf` files
+  - removed the `prepyou-demo-proxy` container
+  - removed the temporary Brave profile used for the `prepyou.ai` DNS override
+  - restarted the `prepyou-dev` container and confirmed the app is back on `http://localhost:3000`
+- Voice-quality pass completed:
+  - upgraded the Vapi Deepgram transcriber from `nova-2` to `nova-3` for both the generation assistant and the interview assistant
+  - added Deepgram `keyterm` prompting in the in-code Vapi assistants to improve recognition of common role, level, and technology phrases used in demos
+  - kept the live transcript visible during generation
+  - kept the review/edit step unchanged as the final correction point
+  - validated the change with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Generation normalization pass completed:
+  - cleaned sentence wrappers like `preparing for ... role` from the captured role
+  - stripped trailing punctuation from role, level, amount, and tech stack values
+  - normalized question counts like `3 questions` and spoken number words down to numeric strings
+  - normalized tech stack phrases like `Java and Python` to comma-separated values
+  - validated the change with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Generation parser grouping fix completed:
+  - grouped consecutive user transcript fragments under the active assistant question instead of treating every final transcript fragment as a new field
+  - kept the existing normalization cleanup on top of the grouped answers
+  - validated the change with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Generation error-state fix completed:
+  - added a visible error card when a generation call ends without producing a review payload
+  - included the captured user transcript in that state for debugging
+  - added a direct `Retake Call` action from the error state
+  - validated the change with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Merged-transcript parser fallback completed:
+  - added a fallback extractor that derives role, type, level, amount, and tech stack from one combined user transcript stream
+  - taught amount normalization to recover common `five` mishears such as `flight questions`
+  - kept the turn-based parser as the primary path and only used the merged-transcript parser when turn grouping could not build a full payload
+  - validated the change with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Final generation text cleanup completed:
+  - stripped extra wrappers like `actually`, `I'm`, and `targeting for` from role and level values
+  - removed stray transcript junk such as `loan` from captured level values
+  - validated the change with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Workflow-based generation restoration completed:
+  - restored the generation flow in `Agent.tsx` to use `NEXT_PUBLIC_VAPI_WORKFLOW_ID` when present
+  - passed user identity variables into the workflow using multiple aliases (`userId`, `userid`, `user_id`, plus name aliases)
+  - after the workflow call ends, the app now polls Firestore for the newest interview created for the current user and redirects to it
+  - kept the transcript-parsing generation path only as a fallback when no workflow id is configured
+  - validated the change with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+  - confirmed the workflow env var is present in the running app container
+- Interview-page techstack hardening completed:
+  - made `getTechLogos` tolerate non-array and non-string input safely
+  - prevented `normalizeTechName` from crashing when the workflow-created interview includes malformed tech-stack data
+  - sanitized `interview.techstack` before rendering `DisplayTechIcons`
+  - added a warning log when an interview record arrives with an invalid techstack shape
+  - validated the change with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Form-based generation completed:
+  - replaced `/interview` generation voice flow with a dedicated `InterviewGenerationForm`
+  - kept the same `/api/vapi/generate` backend route for interview creation
+  - preserved Vapi usage for the actual interview-taking experience only
+  - left the old generation logic in `Agent.tsx` unused rather than removing it in the same pass
+  - validated the change with `docker compose --env-file .env.local exec -T prepyou-dev npx tsc --noEmit`
+- Demo URL hack rollback completed:
+  - removed the temporary `allowedDevOrigins` entry for `prepyou.ai` from `next.config.ts`
+  - deleted the demo-only `demo-nginx.conf` proxy config
+  - switched the recording plan back to the stable local app-window flow on `localhost`

@@ -23,6 +23,7 @@ interface Interview {
   userId: string;
   type: string;
   finalized: boolean;
+  coverImage?: string;
 }
 
 interface CreateFeedbackParams {
@@ -45,6 +46,9 @@ interface InterviewCardProps {
   type: string;
   techstack: string[];
   createdAt?: string;
+  coverImage?: string;
+  actionMode?: "default" | "take";
+  visibilityMode?: "all" | "completed-only";
 }
 
 interface AgentProps {
@@ -74,6 +78,11 @@ interface GetLatestInterviewsParams {
 interface SignInParams {
   email: string;
   idToken: string;
+}
+
+interface AuthActionResult {
+  success: boolean;
+  message: string;
 }
 
 interface SignUpParams {

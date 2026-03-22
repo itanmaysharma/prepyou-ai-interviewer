@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 
 // Session duration (1 week)
 const SESSION_DURATION = 60 * 60 * 24 * 7;
+const SESSION_COOKIE_NAME = "session";
 
 // Set session cookie
 export async function setSessionCookie(idToken: string) {
@@ -16,7 +17,7 @@ export async function setSessionCookie(idToken: string) {
     });
 
     // Set cookie in the browser
-    cookieStore.set("session", sessionCookie, {
+    cookieStore.set(SESSION_COOKIE_NAME, sessionCookie, {
         maxAge: SESSION_DURATION,
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -25,7 +26,14 @@ export async function setSessionCookie(idToken: string) {
     });
 }
 
-export async function signUp(params: SignUpParams) {
+async function clearSessionCookie() {
+    const cookieStore = await cookies();
+    cookieStore.delete(SESSION_COOKIE_NAME);
+}
+
+export async function signUp(
+    params: SignUpParams
+): Promise<AuthActionResult> {
     const { uid, name, email } = params;
 
     try {
@@ -67,20 +75,30 @@ export async function signUp(params: SignUpParams) {
     }
 }
 
-export async function signIn(params: SignInParams) {
+export async function signIn(
+    params: SignInParams
+): Promise<AuthActionResult> {
     const { email, idToken } = params;
 
     try {
-        const userRecord = await auth.getUserByEmail(email);
-        if (!userRecord)
+        const authUser = await auth.getUserByEmail(email);
+        const appUser = await db.collection("users").doc(authUser.uid).get();
+
+        if (!appUser.exists) {
             return {
                 success: false,
-                message: "User does not exist. Create an account.",
+                message: "Account setup is incomplete. Please sign up again.",
             };
+        }
 
         await setSessionCookie(idToken);
+
+        return {
+            success: true,
+            message: "Signed in successfully.",
+        };
     } catch (error: any) {
-        console.log("");
+        console.error("Error signing in:", error);
 
         return {
             success: false,
@@ -91,16 +109,14 @@ export async function signIn(params: SignInParams) {
 
 // Sign out user by clearing the session cookie
 export async function signOut() {
-    const cookieStore = await cookies();
-
-    cookieStore.delete("session");
+    await clearSessionCookie();
 }
 
 // Get current user from session cookie
 export async function getCurrentUser(): Promise<User | null> {
     const cookieStore = await cookies();
 
-    const sessionCookie = cookieStore.get("session")?.value;
+    const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     if (!sessionCookie) return null;
 
     try {
@@ -118,7 +134,8 @@ export async function getCurrentUser(): Promise<User | null> {
             id: userRecord.id,
         } as User;
     } catch (error) {
-        console.log(error);
+        console.error("Error verifying session:", error);
+        await clearSessionCookie();
 
         // Invalid or expired session
         return null;

@@ -97,14 +97,48 @@ export const mappings = {
   "aws amplify": "amplify",
 };
 
+const commonDeepgramKeyterms = [
+  "React",
+  "TypeScript",
+  "JavaScript",
+  "Next.js",
+  "Node.js",
+  "Python",
+  "Java",
+  "frontend developer",
+  "software engineer",
+  "full-stack engineer",
+];
+
+const generationDeepgramKeyterms = [
+  ...commonDeepgramKeyterms,
+  "technical interview",
+  "behavioral interview",
+  "mixed interview",
+  "entry level",
+  "mid level",
+  "senior level",
+  "five questions",
+];
+
+const interviewDeepgramKeyterms = [
+  ...commonDeepgramKeyterms,
+  "API integration",
+  "responsive layouts",
+  "component design",
+  "debugging",
+  "user experience",
+];
+
 export const interviewer: CreateAssistantDTO = {
   name: "Interviewer",
   firstMessage:
       "Hello! Thank you for taking the time to speak with me today. I'm excited to learn more about you and your experience.",
   transcriber: {
     provider: "deepgram",
-    model: "nova-2",
+    model: "nova-3",
     language: "en",
+    keyterm: interviewDeepgramKeyterms,
   },
   voice: {
     provider: "11labs",
@@ -150,6 +184,64 @@ End the conversation on a polite and positive note.
 - Be sure to be professional and polite.
 - Keep all your responses short and simple. Use official language, but be kind and welcoming.
 - This is a voice conversation, so keep your responses short, like in a real conversation. Don't ramble for too long.`,
+      },
+    ],
+  },
+};
+
+export const generationPrompts = {
+  role: "What role are you preparing for?",
+  type: "Should this interview be technical, behavioral, or mixed?",
+  level: "What experience level should the interview target?",
+  amount: "How many questions do you want in the interview?",
+  techstack: "Which technologies should I focus on?",
+} as const;
+
+export const generationCompletionMessage =
+  "Thank you. I have everything I need to generate your interview.";
+
+export const interviewGenerator: CreateAssistantDTO = {
+  name: "Interview Generator",
+  firstMessage: generationPrompts.role,
+  transcriber: {
+    provider: "deepgram",
+    model: "nova-3",
+    language: "en",
+    keyterm: generationDeepgramKeyterms,
+  },
+  voice: {
+    provider: "11labs",
+    voiceId: "sarah",
+    stability: 0.4,
+    similarityBoost: 0.8,
+    speed: 0.9,
+    style: 0.5,
+    useSpeakerBoost: true,
+  },
+  model: {
+    provider: "openai",
+    model: "gpt-4",
+    messages: [
+      {
+        role: "system",
+        content: `You are helping a candidate prepare a new interview in a short voice conversation.
+
+The first message already asked this question:
+1. ${generationPrompts.role}
+
+After the user answers it, ask exactly these remaining questions one at a time, in this order, and wait for the user's answer before moving on:
+2. ${generationPrompts.type}
+3. ${generationPrompts.level}
+4. ${generationPrompts.amount}
+5. ${generationPrompts.techstack}
+
+Rules:
+- Keep every reply short and natural for voice.
+- Do not skip questions.
+- Do not ask multiple questions in one turn.
+- If the user already included the answer to the next question, acknowledge it briefly and move on.
+- After the fifth answer, say exactly: "${generationCompletionMessage}"
+- After saying that sentence, do not ask anything else.`,
       },
     ],
   },

@@ -5,24 +5,31 @@ import Image from "next/image";
 import { Button } from "./ui/button";
 import DisplayTechIcons from "./DisplayTechIcons";
 
-import { cn, getRandomInterviewCover } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { getFeedbackByInterviewId } from "@/lib/actions/general.action";
 
 const InterviewCard = async ({
-                                 interviewId,
-                                 userId,
-                                 role,
-                                 type,
-                                 techstack,
-                                 createdAt,
-                             }: InterviewCardProps) => {
+    interviewId,
+    userId,
+    role,
+    type,
+    techstack,
+    createdAt,
+    coverImage,
+    actionMode = "default",
+    visibilityMode = "all",
+}: InterviewCardProps) => {
     const feedback =
         userId && interviewId
             ? await getFeedbackByInterviewId({
-                interviewId,
-                userId,
-            })
+                  interviewId,
+                  userId,
+              })
             : null;
+
+    if (visibilityMode === "completed-only" && !feedback) {
+        return null;
+    }
 
     const normalizedType = /mix/gi.test(type) ? "Mixed" : type;
 
@@ -34,11 +41,25 @@ const InterviewCard = async ({
         }[normalizedType] || "bg-light-600";
 
     const formattedDate = dayjs(
-        feedback?.createdAt || createdAt || Date.now()
+        feedback?.createdAt ?? createdAt ?? Date.now()
     ).format("MMM D, YYYY");
+    const actionHref =
+        actionMode === "take"
+            ? `/interview/${interviewId}`
+            : feedback
+              ? `/interview/${interviewId}/feedback`
+              : `/interview/${interviewId}`;
+    const actionLabel =
+        actionMode === "take"
+            ? feedback
+                ? "Retake Interview"
+                : "Join Interview"
+            : feedback
+              ? "Check Feedback"
+              : "";
 
     return (
-        <div className="card-border w-[360px] max-sm:w-full min-h-96">
+        <div className="card-border interview-card-shell w-[360px] max-sm:w-full min-h-96">
             <div className="card-interview">
                 <div>
                     {/* Type Badge */}
@@ -53,7 +74,7 @@ const InterviewCard = async ({
 
                     {/* Cover Image */}
                     <Image
-                        src={getRandomInterviewCover()}
+                        src={coverImage || "/covers/adobe.png"}
                         alt="cover-image"
                         width={90}
                         height={90}
@@ -77,7 +98,7 @@ const InterviewCard = async ({
 
                         <div className="flex flex-row gap-2 items-center">
                             <Image src="/star.svg" width={22} height={22} alt="star" />
-                            <p>{feedback?.totalScore || "---"}/100</p>
+                            <p>{feedback?.totalScore ?? "---"}/100</p>
                         </div>
                     </div>
 
@@ -91,17 +112,11 @@ const InterviewCard = async ({
                 <div className="flex flex-row justify-between">
                     <DisplayTechIcons techStack={techstack} />
 
-                    <Button className="btn-primary">
-                        <Link
-                            href={
-                                feedback
-                                    ? `/interview/${interviewId}/feedback`
-                                    : `/interview/${interviewId}`
-                            }
-                        >
-                            {feedback ? "Check Feedback" : "View Interview"}
-                        </Link>
-                    </Button>
+                    {actionLabel ? (
+                        <Button className="btn-primary">
+                            <Link href={actionHref}>{actionLabel}</Link>
+                        </Button>
+                    ) : null}
                 </div>
             </div>
         </div>

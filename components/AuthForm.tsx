@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { toast } from "sonner";
 import { auth } from "@/firebase/client";
+import { FirebaseError } from "firebase/app";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,6 +13,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
+    sendPasswordResetEmail,
+    signOut as firebaseSignOut,
 } from "firebase/auth";
 
 import { Form } from "@/components/ui/form";
@@ -19,6 +22,17 @@ import { Button } from "@/components/ui/button";
 
 import { signIn, signUp } from "@/lib/actions/auth.action";
 import FormField from "./FormField";
+
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+    "auth/email-already-in-use": "This email is already in use.",
+    "auth/invalid-credential": "Invalid email or password.",
+    "auth/invalid-email": "Enter a valid email address.",
+    "auth/network-request-failed": "Network error. Please try again.",
+    "auth/too-many-requests": "Too many attempts. Please try again later.",
+    "auth/user-not-found": "User does not exist. Create an account.",
+    "auth/weak-password": "Password should be at least 6 characters.",
+    "auth/wrong-password": "Invalid email or password.",
+};
 
 const authFormSchema = (type: FormType) => {
     return z.object({
@@ -41,6 +55,16 @@ const AuthForm = ({ type }: { type: FormType }) => {
         },
     });
 
+    const getErrorMessage = (error: unknown) => {
+        if (error instanceof FirebaseError) {
+            return AUTH_ERROR_MESSAGES[error.code] || "Authentication failed.";
+        }
+
+        if (error instanceof Error) return error.message;
+
+        return "Something went wrong. Please try again.";
+    };
+
     const onSubmit = async (data: z.infer<typeof formSchema>) => {
         try {
             if (type === "sign-up") {
@@ -60,12 +84,14 @@ const AuthForm = ({ type }: { type: FormType }) => {
                 });
 
                 if (!result.success) {
+                    await firebaseSignOut(auth);
                     toast.error(result.message);
                     return;
                 }
 
-                toast.success("Account created successfully. Please sign in.");
-                router.push("/sign-in");
+                toast.success(result.message);
+                router.replace("/sign-in");
+                router.refresh();
             } else {
                 const { email, password } = data;
 
@@ -81,21 +107,45 @@ const AuthForm = ({ type }: { type: FormType }) => {
                     return;
                 }
 
-                await signIn({
+                const result = await signIn({
                     email,
                     idToken,
                 });
 
-                toast.success("Signed in successfully.");
-                router.push("/");
+                if (!result.success) {
+                    await firebaseSignOut(auth);
+                    toast.error(result.message);
+                    return;
+                }
+
+                toast.success(result.message);
+                router.replace("/");
+                router.refresh();
             }
         } catch (error) {
-            console.log(error);
-            toast.error(`There was an error: ${error}`);
+            console.error(error);
+            toast.error(getErrorMessage(error));
+        }
+    };
+
+    const handleForgotPassword = async () => {
+        const email = form.getValues("email");
+
+        if (!email) {
+            toast.error("Enter your email first to receive a reset link.");
+            return;
+        }
+
+        try {
+            await sendPasswordResetEmail(auth, email);
+            toast.success("Password reset email sent.");
+        } catch (error) {
+            toast.error(getErrorMessage(error));
         }
     };
 
     const isSignIn = type === "sign-in";
+    const isSubmitting = form.formState.isSubmitting;
 
     return (
         <div className="card-border lg:min-w-[566px]">
@@ -138,8 +188,26 @@ const AuthForm = ({ type }: { type: FormType }) => {
                             type="password"
                         />
 
-                        <Button className="btn" type="submit">
-                            {isSignIn ? "Sign In" : "Create an Account"}
+                        {isSignIn && (
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => void handleForgotPassword()}
+                                    className="text-sm font-medium text-user-primary cursor-pointer"
+                                >
+                                    Forgot password?
+                                </button>
+                            </div>
+                        )}
+
+                        <Button className="btn" type="submit" disabled={isSubmitting}>
+                            {isSubmitting
+                                ? isSignIn
+                                    ? "Signing In..."
+                                    : "Creating Account..."
+                                : isSignIn
+                                  ? "Sign In"
+                                  : "Create an Account"}
                         </Button>
                     </form>
                 </Form>

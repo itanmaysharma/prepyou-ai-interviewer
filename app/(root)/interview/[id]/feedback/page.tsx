@@ -13,25 +13,26 @@ import { getCurrentUser } from "@/lib/actions/auth.action";
 const Feedback = async ({ params }: RouteParams) => {
     const { id } = await params;
     const user = await getCurrentUser();
+    if (!user) redirect("/sign-in");
 
     const interview = await getInterviewById(id);
     if (!interview) redirect("/");
 
     const feedback = await getFeedbackByInterviewId({
         interviewId: id,
-        userId: user?.id!,
+        userId: user.id,
     });
 
     return (
         <section className="section-feedback">
-            <div className="flex flex-row justify-center">
+            <div className="flex flex-row justify-center feedback-reveal-step feedback-reveal-step-1">
                 <h1 className="text-4xl font-semibold">
                     Feedback on the Interview -{" "}
                     <span className="capitalize">{interview.role}</span> Interview
                 </h1>
             </div>
 
-            <div className="flex flex-row justify-center ">
+            <div className="flex flex-row justify-center feedback-reveal-step feedback-reveal-step-2">
                 <div className="flex flex-row gap-5">
                     {/* Overall Impression */}
                     <div className="flex flex-row gap-2 items-center">
@@ -59,10 +60,12 @@ const Feedback = async ({ params }: RouteParams) => {
 
             <hr />
 
-            <p>{feedback?.finalAssessment}</p>
+            <p className="feedback-reveal-step feedback-reveal-step-3">
+                {feedback?.finalAssessment}
+            </p>
 
             {/* Interview Breakdown */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 feedback-reveal-step feedback-reveal-step-4">
                 <h2>Breakdown of the Interview:</h2>
                 {feedback?.categoryScores?.map((category, index) => (
                     <div key={index}>
@@ -74,7 +77,7 @@ const Feedback = async ({ params }: RouteParams) => {
                 ))}
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 feedback-reveal-step feedback-reveal-step-5">
                 <h3>Strengths</h3>
                 <ul>
                     {feedback?.strengths?.map((strength, index) => (
@@ -83,7 +86,7 @@ const Feedback = async ({ params }: RouteParams) => {
                 </ul>
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 feedback-reveal-step feedback-reveal-step-6">
                 <h3>Areas for Improvement</h3>
                 <ul>
                     {feedback?.areasForImprovement?.map((area, index) => (
@@ -92,7 +95,7 @@ const Feedback = async ({ params }: RouteParams) => {
                 </ul>
             </div>
 
-            <div className="buttons">
+            <div className="buttons feedback-reveal-step feedback-reveal-step-7">
                 <Button className="btn-secondary flex-1">
                     <Link href="/" className="flex w-full justify-center">
                         <p className="text-sm font-semibold text-primary-200 text-center">
